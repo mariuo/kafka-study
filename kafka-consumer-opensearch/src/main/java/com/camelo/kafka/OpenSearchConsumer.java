@@ -11,6 +11,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.bulk.BulkResponse;
@@ -38,18 +39,36 @@ public class OpenSearchConsumer {
         Logger log = LoggerFactory.getLogger(OpenSearchConsumer.class.getSimpleName());
 
         // create an OpenSearch Client
-        RestHighLevelClient openSearch = createOpenSearchClient();
+        RestHighLevelClient openSearchClient = createOpenSearchClient();
 
         // create our kafka client
         KafkaConsumer<String, String> consumer = createKafkaConsumer();
 
+        // get a reference to the main thread
+        final Thread mainThread = Thread.currentThread();
+
+        //add shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            public void run(){
+                log.info("Detected a shutdown, lets exit by calling consumer.wakeup()...");
+                consumer.wakeup();
+
+                // join the main thread to allow the execution of the code in the main thread
+                try {
+                    mainThread.join();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+
         // we need to create the index an OpenSearch if it doesn't exist
-        try(openSearch; consumer){
-            boolean indexExists = openSearch.indices().exists(new GetIndexRequest("wikimedia"), RequestOptions.DEFAULT);
+        try(openSearchClient; consumer){
+            boolean indexExists = openSearchClient.indices().exists(new GetIndexRequest("wikimedia"), RequestOptions.DEFAULT);
 
             if(!indexExists){
                 CreateIndexRequest createIndexRequest = new CreateIndexRequest("wikimedia");
-                openSearch.indices().create(createIndexRequest, RequestOptions.DEFAULT);
+                openSearchClient.indices().create(createIndexRequest, RequestOptions.DEFAULT);
                 log.info("The wikimedia Index has be created.");
             }else{
                 log.info("The wikimedia Index already exists.");
@@ -82,7 +101,7 @@ public class OpenSearchConsumer {
                                 .source(record.value(), XContentType.JSON)
                                 .id(id);
 
-//                        IndexResponse response = openSearch.index(indexRequest, RequestOptions.DEFAULT);
+//                        IndexResponse response = openSearchClient.index(indexRequest, RequestOptions.DEFAULT);
 
                         bulkRequest.add(indexRequest);
 
@@ -92,14 +111,14 @@ public class OpenSearchConsumer {
                     }
                 }
                 if(bulkRequest.numberOfActions() > 0){
-                    BulkResponse bulkResponse = openSearch.bulk(bulkRequest, RequestOptions.DEFAULT);
+                    BulkResponse bulkResponse = openSearchClient.bulk(bulkRequest, RequestOptions.DEFAULT);
                     log.info("Inserted " + bulkResponse.getItems().length + " records.");
 
-//                    try{
-//                        Thread.sleep(1000);
-//                    }catch (Exception e){
-//                        e.printStackTrace();
-//                    }
+                    try{
+                        Thread.sleep(1000);
+                    }catch (Exception e){
+                        e.printStackTrace();
+                    }
                 }
 
 
@@ -107,17 +126,15 @@ public class OpenSearchConsumer {
                 consumer.commitSync();
                 log.info("Offsets have been committed!!");
             }
-
+        }catch (WakeupException e ){
+            log.info("Consumer is starting to shut down");
+        }catch (Exception e){
+            log.error("Unexpect exception in the consumer, "+ e);
+        }finally {
+            consumer.close();
+            openSearchClient.close();
+            log.info("The consumer is now gracefully shutdown.");
         }
-
-
-
-
-        // main code logic
-
-        // close things
-
-
     }
 
     private static String extractId(String json) {

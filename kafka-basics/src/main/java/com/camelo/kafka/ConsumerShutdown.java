@@ -9,14 +9,13 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.plaf.TableHeaderUI;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Properties;
 
 
-public class ProducerConsumerShutdown {
-    private static final Logger log = LoggerFactory.getLogger(ProducerConsumerShutdown.class.getSimpleName());
+public class ConsumerShutdown {
+    private static final Logger log = LoggerFactory.getLogger(ConsumerShutdown.class.getSimpleName());
 
     public static void main(String[] args) {
         log.info("I am a Kafka Consumer");

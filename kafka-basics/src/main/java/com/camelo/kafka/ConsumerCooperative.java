@@ -11,8 +11,8 @@ import java.util.Arrays;
 import java.util.Properties;
 
 
-public class ProducerConsumerCooperative {
-    private static final Logger log = LoggerFactory.getLogger(ProducerConsumerCooperative.class.getSimpleName());
+public class ConsumerCooperative {
+    private static final Logger log = LoggerFactory.getLogger(ConsumerCooperative.class.getSimpleName());
 
     public static void main(String[] args) {
         log.info("I am a Kafka Consumer");
